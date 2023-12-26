@@ -30,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <error.h>
 
 typedef u_int64_t usize;
 
@@ -64,13 +65,15 @@ namespace du::du_physical_extents {
     usize end;
   };
 
+  typedef std::pair<usize, std::string> error_type;
+
   class seen_physical_extents {
   public:
-    std::string fetch_extents(const std::string& path);
+    error_type fetch_extents(const std::string& path);
 
     usize get_overlapping_and_insert(const range_t& range);
 
-    std::pair<usize, std::vector<std::string>> get_total_overlap_and_insert(const std::string& path);
+    std::pair<usize, std::vector<error_type>> get_total_overlap_and_insert(const std::string& path);
 
   private:
     std::map<usize, usize> ranges;
@@ -90,26 +93,27 @@ struct file_descriptor_raii
   }
 };
 
-std::string seen_physical_extents::fetch_extents(const std::string& path)
+error_type seen_physical_extents::fetch_extents(const std::string& path)
 {
   file_descriptor_raii f(path.c_str());
 
-  if (ioctl(f.m_fd, FS_IOC_FIEMAP, &fm) != 0) {
+  auto err_code = ioctl(f.m_fd, FS_IOC_FIEMAP, &fm);
+  if (err_code != 0) {
     std::ostringstream stream;
-    stream << "Unable to FIEMAP " << path;
-    return stream.str();
+    stream << "Unable to FIEMAP (err_code: " << err_code << "): " << path;
+    return std::make_pair(err_code, stream.str());
   }
 
-  return "";
+  return std::make_pair(0, "");
 }
 
-  std::pair<usize, std::vector<std::string>>
+  std::pair<usize, std::vector<error_type>>
   seen_physical_extents::get_total_overlap_and_insert(const std::string& path)
   {
-    std::vector<std::string> errors;
+    std::vector<error_type> errors;
 
     auto error = fetch_extents(path); // result stored in this->fm
-    if (error.size() > 0) {
+    if (error.first != 0) {
       errors.push_back(error);
       return std::make_pair(0, errors);
     }
@@ -226,7 +230,9 @@ uint64_t seen_physical_extents_get_total_overlap_and_insert(seen_physical_extent
 {
   auto result = instance->get_total_overlap_and_insert(path);
 
-  // TODO: report errors!
+  for (const auto& error_entry: result.second) {
+    error(0, error_entry.first, "\"%s\"", error_entry.second.c_str());
+  }
 
   return result.first;
 }
