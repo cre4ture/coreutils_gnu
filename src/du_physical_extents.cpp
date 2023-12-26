@@ -59,7 +59,7 @@ namespace du::du_physical_extents {
     }
   };
 
-  struct Range {
+  struct range_t {
     usize start;
     usize end;
   };
@@ -68,7 +68,7 @@ namespace du::du_physical_extents {
   public:
     std::string fetch_extents(const std::string& path);
 
-    usize get_overlapping_and_insert(const Range& range);
+    usize get_overlapping_and_insert(const range_t& range);
 
     std::pair<usize, std::vector<std::string>> get_total_overlap_and_insert(const std::string& path);
 
@@ -77,22 +77,22 @@ namespace du::du_physical_extents {
     fiemap_with_extents<8> fm;
   };
 
-struct File
+struct file_descriptor_raii
 {
   int m_fd;
 
-  File(const char* filename)
+  file_descriptor_raii(const char* filename)
   : m_fd(open(filename, O_RDONLY))
   {}
 
-  ~File() {
+  ~file_descriptor_raii() {
     close(m_fd);
   }
 };
 
 std::string seen_physical_extents::fetch_extents(const std::string& path)
 {
-  File f(path.c_str());
+  file_descriptor_raii f(path.c_str());
 
   if (ioctl(f.m_fd, FS_IOC_FIEMAP, &fm) != 0) {
     std::ostringstream stream;
@@ -122,7 +122,7 @@ std::string seen_physical_extents::fetch_extents(const std::string& path)
           !(extent.fe_flags & FIEMAP_EXTENT_DATA_INLINE) && // the data so less that is put as part of the metadata, fe invalid
             (extent.fe_flags & FIEMAP_EXTENT_SHARED)) // performance: only with this bit set, extents are relevant for us
       {
-        auto range = Range{
+        auto range = range_t{
             start: extent.fe_physical,
             end: extent.fe_physical + extent.fe_length,
         };
@@ -134,7 +134,7 @@ std::string seen_physical_extents::fetch_extents(const std::string& path)
     return std::make_pair(total_overlapping, errors);
   }
 
-  usize seen_physical_extents::get_overlapping_and_insert(const Range& range)
+  usize seen_physical_extents::get_overlapping_and_insert(const range_t& range)
   {
     auto same_or_before = ranges.upper_bound(range.start+1);
 
