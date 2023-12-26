@@ -44,6 +44,7 @@ noinst_HEADERS =		\
   src/copy.h			\
   src/cp-hash.h			\
   src/dircolors.h		\
+  src/du_physical_extents.h \
   src/expand-common.h		\
   src/find-mount-point.h	\
   src/fs.h			\
@@ -447,6 +448,8 @@ src_base32_SOURCES = src/basenc.c
 src_base32_CPPFLAGS = -DBASE_TYPE=32 $(AM_CPPFLAGS)
 src_basenc_SOURCES = src/basenc.c
 src_basenc_CPPFLAGS = -DBASE_TYPE=42 $(AM_CPPFLAGS)
+
+src_du_SOURCES = src/du.c src/du_physical_extents.cpp
 
 src_expand_SOURCES = src/expand.c src/expand-common.c
 src_unexpand_SOURCES = src/unexpand.c src/expand-common.c

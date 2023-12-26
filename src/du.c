@@ -42,6 +42,7 @@
 #include "xfts.h"
 #include "xstrtol.h"
 #include "xstrtol-error.h"
+#include "du_physical_extents.h"
 
 extern bool fts_debug;
 
@@ -583,6 +584,17 @@ process_file (FTS *fts, FTSENT *ent)
           return true;
         }
     }
+
+  seen_physical_extents_t* seen_phys_extents = fetch_or_create_seen_physical_extents_for_dev_id(sb->st_dev);
+  uint64_t total_overlap = seen_physical_extents_get_total_overlap_and_insert(seen_phys_extents, file);
+  if (total_overlap > 0 && total_overlap > sb->st_size)
+  {
+    return true; // file excluded
+  }
+  else
+  {
+    dui.size -= total_overlap;
+  }
 
   duinfo_set (&dui,
               (apparent_size
