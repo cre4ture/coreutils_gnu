@@ -145,6 +145,8 @@ static bool opt_nul_terminate_output = false;
 /* If true, print a grand total at the end.  */
 static bool print_grand_total = false;
 
+static bool shared_extents = false;
+
 /* If nonzero, do not add sizes of subdirectories.  */
 static bool opt_separate_dirs = false;
 
@@ -225,6 +227,7 @@ static struct option const long_options[] =
   {"dereference-args", no_argument, nullptr, 'D'},
   {"exclude", required_argument, nullptr, EXCLUDE_OPTION},
   {"exclude-from", required_argument, nullptr, 'X'},
+  {"shared-extents", no_argument, nullptr, 'e'},
   {"files0-from", required_argument, nullptr, FILES0_FROM_OPTION},
   {"human-readable", no_argument, nullptr, 'h'},
   {"inodes", no_argument, nullptr, INODES_OPTION},
@@ -330,6 +333,7 @@ Summarize device usage of the set of FILEs, recursively for directories.\n\
 "), stdout);
       fputs (_("\
   -P, --no-dereference  don't follow any symbolic links (this is the default)\n\
+  -e, --shared-extents  search for shared file extents (e.g. on CoW filesystems)\n\
   -S, --separate-dirs   for directories do not include size of subdirectories\n\
       --si              like -h, but use powers of 1000 not 1024\n\
   -s, --summarize       display only a total for each argument\n\
@@ -585,21 +589,21 @@ process_file (FTS *fts, FTSENT *ent)
         }
     }
 
-  seen_physical_extents_t* seen_phys_extents = fetch_or_create_seen_physical_extents_for_dev_id(sb->st_dev);
-  uint64_t total_overlap = seen_physical_extents_get_total_overlap_and_insert(seen_phys_extents, file);
-  if (total_overlap > 0 && total_overlap > sb->st_size)
-  {
-    return true; // file excluded
-  }
-  else
-  {
-    dui.size -= total_overlap;
-  }
+  uint64_t total_overlap = 0;
+  if (shared_extents && (info == FTS_F))
+    {
+      seen_physical_extents_t* seen_phys_extents = fetch_or_create_seen_physical_extents_for_dev_id(sb->st_dev);
+      total_overlap = seen_physical_extents_get_total_overlap_and_insert(seen_phys_extents, file);
+      if (total_overlap > 0 && total_overlap > sb->st_size)
+        {
+          return true; // file excluded
+        }
+    }
 
   duinfo_set (&dui,
               (apparent_size
-               ? (usable_st_size (sb) ? MAX (0, sb->st_size) : 0)
-               : (uintmax_t) STP_NBLOCKS (sb) * ST_NBLOCKSIZE),
+               ? (usable_st_size (sb) ? MAX (0, sb->st_size - total_overlap) : 0)
+               : ((uintmax_t) STP_NBLOCKS (sb) * ST_NBLOCKSIZE) - total_overlap),
               (time_type == time_mtime ? get_stat_mtime (sb)
                : time_type == time_atime ? get_stat_atime (sb)
                : get_stat_ctime (sb)));
@@ -766,7 +770,7 @@ main (int argc, char **argv)
   while (true)
     {
       int oi = -1;
-      int c = getopt_long (argc, argv, "0abd:chHklmst:xB:DLPSX:",
+      int c = getopt_long (argc, argv, "0abd:echHklmst:xB:DLPSX:",
                            long_options, &oi);
       if (c == -1)
         break;
@@ -799,6 +803,10 @@ main (int argc, char **argv)
 
         case 'c':
           print_grand_total = true;
+          break;
+
+        case 'e':
+          shared_extents = true;
           break;
 
         case 'h':
