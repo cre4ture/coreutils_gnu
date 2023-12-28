@@ -594,7 +594,7 @@ process_file (FTS *fts, FTSENT *ent)
     {
       seen_physical_extents_t* seen_phys_extents = fetch_or_create_seen_physical_extents_for_dev_id(sb->st_dev);
       total_overlap = seen_physical_extents_get_total_overlap_and_insert(seen_phys_extents, file);
-      if (total_overlap > 0 && total_overlap > sb->st_size)
+      if (total_overlap > 0 && total_overlap >= sb->st_size)
         {
           return true; // file excluded
         }
